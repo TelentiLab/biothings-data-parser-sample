@@ -1,18 +1,17 @@
 import os
-import logging
-from biothings.utils.dataload import dict_sweep
+import unicodedata
+from collections import defaultdict
+from csv import DictReader
 
-FILE_NOT_FOUND_ERROR = 'Cannot find input file: {}'  # error message constant
-FILE_LINES = 8360396
+from biothings.utils.dataload import open_anyfile, dict_sweep
+
+FILE_NOT_FOUND_ERROR = 'Cannot find input file: {}'   # error message constant
 
 # change following parameters accordingly
-source_name = 'ccr'  # source name that appears in the api response
-file_name = 'ccrs.chromosome.v2.20180420.bed'  # sample file
-delimiter = '\t'  # the delimiter that separates each field
-
-# configure logger
-logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO)
-logger = logging.getLogger('ccr_logger')
+data_schema = ('chrom', 'start', 'end', 'score')    # field names of the data
+source_name = 'sample_source'   # source name that appears in the api response
+file_name = 'sample_data'   # name of the file to read
+delimiter = '\t'    # the delimiter that separates each field
 
 
 def load_data(data_folder: str):
@@ -26,43 +25,28 @@ def load_data(data_folder: str):
     """
     input_file = os.path.join(data_folder, file_name)
     # raise an error if file not found
-    if not os.path.exists(input_file):
-        logger.error(FILE_NOT_FOUND_ERROR.format(input_file))
-        raise FileExistsError(FILE_NOT_FOUND_ERROR.format(input_file))
+    assert os.path.exists(input_file), FILE_NOT_FOUND_ERROR.format(input_file)
 
-    with open(input_file, 'r') as file:
-        logger.info(f'start reading file: {file_name}')
-        count = 0
-        for line in file:
-            logger.info(f'reading line {count} ({(count / FILE_LINES * 100):.2f}%)')  # format to use 2 decimals
-            count += 1
-            # read and parse each line into a dict
-            # schema: (chrom, start, end, ccr_pct, gene, ranges, varflag, syn_density,
-            #          cpg, cov_score, resid, resid_pctile, unique_key)
-            (chrom, start, end, ccr_pct, gene, ranges, varflag, syn_density, cpg,
-                cov_score, resid, resid_pctile, unique_key) = line.strip().split(delimiter)
-            _id = f'chr{chrom}:g.{start}_{end}'
-            # enforce data type
-            variant = {
-                'chrom': chrom,
-                'start': int(start),
-                'end': int(end),
-                'ccr_pct': float(ccr_pct),
-                'gene': gene,
-                'ranges': ranges.split(','),
-                'varflag': varflag is 'VARTRUE',
-                'syn_density': float(syn_density),
-                'cpg': float(cpg),
-                'cov_score': float(cov_score),
-                'resid': float(resid),
-                'resid_pctile': float(resid_pctile),
-                'unique_key': int(unique_key),
-            }
-            # remove empty fields
+    with open_anyfile(input_file) as file:
+        # Remove duplicated lines if any
+        lines = set(list(file))
+        # read and parse each line into a dict
+        reader = DictReader(lines, fieldnames=data_schema, delimiter=delimiter)
+        # access non existing keys will return an empty list by default
+        results = defaultdict(list)
+
+        for row in reader:  # start processing each lines of data (stored in dicts)
+            # construct id (e.g. chr1:g.678900_679000)
+            _id = '{chrom}:g.{start}_{end}'.format(chrom=row['chrom'], start=row['start'], end=row['end'])
+            # optional step: normalize data
+            variant = {k: unicodedata.normalize('NFKD', v) for k, v in row.items()}
+            # optional step: delete invalid fields within each dict
             variant = dict_sweep(variant, vals=['', 'null', 'N/A', None, [], {}])
-            # commit an entry by yielding
+            # append dict to the result list using the _id
+            results[_id].append(variant)
+
+        for k, v in results.items():
             yield {
-                "_id": _id,
-                source_name: variant
+                '_id': k,
+                source_name: v
             }
-        logger.info(f'parsing completed, {count} lines read')
