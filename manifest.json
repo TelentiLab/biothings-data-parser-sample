@@ -1,7 +1,7 @@
 {
     "version": "0.1",
     "dumper" : {
-        "data_url" : "http://localhost:8080/data/ccrs.chromosome.v2.20180420.bed.gz",
+        "data_url" : "http://localhost:8080/data/sample_data.gz",
         "uncompress" : true
     },
     "uploader" : {
