@@ -1,2 +1,2 @@
-# CCR data parser for Biothings Hub
-This repo stems from the **biothings-data-parser-sample** code, and is used to parse **CCR** data for Biothings Hub.
+# biothings-data-parser-sample
+This repo contains sample code to parse raw data into Biothings Studio, which then makes it available in the format of Biothings API.
