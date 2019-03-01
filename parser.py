@@ -1,17 +1,24 @@
+import logging
 import os
-import unicodedata
-from collections import defaultdict
-from csv import DictReader
-
-from biothings.utils.dataload import open_anyfile, dict_sweep
 
 FILE_NOT_FOUND_ERROR = 'Cannot find input file: {}'   # error message constant
 
+# configure logger
+logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO)
+logger = logging.getLogger('biothings_parser')
+
 # change following parameters accordingly
 data_schema = ('chrom', 'start', 'end', 'score')    # field names of the data
-source_name = 'sample_source'   # source name that appears in the api response
-file_name = 'sample_data'   # name of the file to read
-delimiter = '\t'    # the delimiter that separates each field
+source_name = 'my_data_source'   # source name that appears in the api response
+file_name = 'sample_data.tsv'   # name of the file to read
+delimiter = ','    # the delimiter that separates each field
+
+
+def _inspect_file(filename: str) -> int:
+    with open(filename) as f:
+        for i, l in enumerate(f):
+            pass
+    return i + 1
 
 
 def load_data(data_folder: str):
@@ -25,28 +32,54 @@ def load_data(data_folder: str):
     """
     input_file = os.path.join(data_folder, file_name)
     # raise an error if file not found
-    assert os.path.exists(input_file), FILE_NOT_FOUND_ERROR.format(input_file)
+    if not os.path.exists(input_file):
+        logger.error(FILE_NOT_FOUND_ERROR.format(input_file))
+        raise FileExistsError(FILE_NOT_FOUND_ERROR.format(input_file))
 
-    with open_anyfile(input_file) as file:
-        # Remove duplicated lines if any
-        lines = set(list(file))
-        # read and parse each line into a dict
-        reader = DictReader(lines, fieldnames=data_schema, delimiter=delimiter)
-        # access non existing keys will return an empty list by default
-        results = defaultdict(list)
+    file_lines = _inspect_file(input_file)  # get total lines so that we can indicate progress in next step
 
-        for row in reader:  # start processing each lines of data (stored in dicts)
-            # construct id (e.g. chr1:g.678900_679000)
-            _id = '{chrom}:g.{start}_{end}'.format(chrom=row['chrom'], start=row['start'], end=row['end'])
-            # optional step: normalize data
-            variant = {k: unicodedata.normalize('NFKD', v) for k, v in row.items()}
-            # optional step: delete invalid fields within each dict
-            variant = dict_sweep(variant, vals=['', 'null', 'N/A', None, [], {}])
-            # append dict to the result list using the _id
-            results[_id].append(variant)
+    with open(input_file, 'r') as file:
+        logger.info(f'start reading file: {file_name}')
+        count = 0
+        skipped = []
+        for line in file:
+            if line.startswith('#') or line.strip() == '':
+                skipped.append(line)
+                continue  # skip commented/empty lines
+            count += 1
+            logger.info(f'reading line {count} ({(count / file_lines * 100):.2f}%)')  # format to use 2 decimals
 
-        for k, v in results.items():
-            yield {
-                '_id': k,
-                source_name: v
+            try:
+                chrom, start, end, percentile = line.strip().split(delimiter)   # unpack according to schema
+            except ValueError:
+                logger.error(f'failed to unpack line {count}: {line}')
+                logger.error(f'got: {line.strip().split(delimiter)}')
+                skipped.append(line)
+                continue  # skip error line
+
+            try:    # parse each field if necessary (format, enforce datatype etc.)
+                chrom = chrom.replace('chr', '')
+                start = int(start)
+                end = int(end)
+                percentile = float(percentile)
+            except ValueError as e:
+                logger.error(f'failed to cast type for line {count}: {e}')
+                skipped.append(line)
+                continue  # skip error line
+
+            _id = f'chr{chrom}:g.{start}_{end}'  # define id
+
+            variant = {
+                'chrom': chrom,
+                'start': start,
+                'end': end,
+                'percentile': percentile,
             }
+
+            yield {  # commit an entry by yielding
+                "_id": _id,
+                source_name: variant
+            }
+        logger.info(f'parse completed, {len(skipped)}/{file_lines} lines skipped.')
+        for x in skipped:
+            logger.info(f'skipped line: {x.strip()}')
