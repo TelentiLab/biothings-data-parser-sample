@@ -1,11 +1,13 @@
 {
-    "version": "0.1",
+    "version": "0.2",
+    "__metadata__" : {
+        "url" : "https://yoursite.com"
+    },
     "dumper" : {
-        "data_url" : "http://localhost:8080/data/sample_data.gz",
+        "data_url" : "http://localhost:8080/data/sample_data.tsv.gz",
         "uncompress" : true
     },
     "uploader" : {
-        "parser" : "parser:load_data",
-        "ignore_duplicates" : false
+        "parser" : "parser:load_data"
     }
 }
