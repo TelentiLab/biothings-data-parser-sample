@@ -14,6 +14,7 @@ DELIMITER = '\t'    # the delimiter that separates each field
 
 
 def _inspect_file(filename: str) -> int:
+    i = 0
     with open(filename) as f:
         for i, l in enumerate(f):
             pass
