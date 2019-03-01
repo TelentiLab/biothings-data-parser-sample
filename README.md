@@ -11,13 +11,13 @@ This Python project uses [**pipenv**](https://pipenv.readthedocs.io/en/latest/) 
 To install **pipenv**:
 
 ```bash
-pip isntall pipenv
+pip install pipenv
 ```
 
 To create project virtual environment, along with the dependencies:
 
 ```bash
-pipenv isntall
+pipenv install
 ``` 
 
 Hint: make sure you have Python `3.6` installed.
